@@ -1,39 +1,50 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-    <title>SGDI - Sistema de Gestão de Demandas</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SGDI - Sistema de Gestao de Demandas</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        body { margin: 0; }
-    </style>
 </head>
 <body>
-    <div class="header">
-        <h1>SGDI</h1>
-        <div class="menu">
-            <a href="/">Início</a>
-            <a href="/nova_demanda">Nova Demanda</a>
-            <form action="/buscar" method="GET" style="display:inline;">
-                <input type="text" name="q" placeholder="Buscar">
+    <header class="header">
+        <div class="brand">
+            <div class="brand-mark">SG</div>
+            <div>
+                <h1>SGDI</h1>
+                <p>Gestao simples de demandas</p>
+            </div>
+        </div>
+
+        <nav class="menu">
+            <a href="/">Inicio</a>
+            <a href="/nova_demanda">Nova demanda</a>
+            <form action="/" method="GET" class="search-form">
+                <input type="hidden" name="tab" value="{{ active_tab|default('abertas') }}">
+                <input type="text" name="q" value="{{ search_query|default('') }}" placeholder="Buscar demanda">
                 <button type="submit">Buscar</button>
             </form>
-        </div>
-    </div>
+        </nav>
+    </header>
 
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    <main class="page">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alerts">
+                    {% for message in messages %}
+                        <div class="alert">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
 
-    <div class="container">
-        {% block content %}{% endblock %}
-    </div>
+        <section class="container">
+            {% block content %}{% endblock %}
+        </section>
+    </main>
 
-    <div class="footer">
-        <p>SGDI v1.0 - 2024</p>
-    </div>
+    <footer class="footer">
+        <p>SGDI v1.0</p>
+    </footer>
 </body>
 </html>
