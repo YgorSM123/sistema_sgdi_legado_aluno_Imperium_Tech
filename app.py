@@ -171,6 +171,8 @@ def ensure_database():
 
 ensure_database()
 
+PRIORIDADES_VALIDAS = frozenset(("alta", "media", "baixa"))
+
 
 @app.route('/')
 def index():
@@ -183,6 +185,9 @@ def render_index():
         tab = 'abertas'
 
     q = (request.args.get('q') or '').strip()
+    prioridade_filtro = (request.args.get("prioridade") or "").strip().lower()
+    if prioridade_filtro not in PRIORIDADES_VALIDAS:
+        prioridade_filtro = ""
     status = 'Finalizada' if tab == 'finalizadas' else 'Aberta'
 
     conn = get_db()
@@ -198,6 +203,10 @@ def render_index():
     sql = 'SELECT * FROM demandas WHERE status = ?'
     params = [status]
 
+    if prioridade_filtro:
+        sql += " AND prioridade = ?"
+        params.append(prioridade_filtro)
+
     if q:
         sql += ' AND (titulo LIKE ? OR descricao LIKE ? OR solicitante LIKE ?)'
         like = f'%{q}%'
@@ -211,6 +220,7 @@ def render_index():
         demandas=demandas,
         active_tab=tab,
         search_query=q,
+        prioridade_filtro=prioridade_filtro,
         abertas_count=abertas_count,
         finalizadas_count=finalizadas_count,
     )

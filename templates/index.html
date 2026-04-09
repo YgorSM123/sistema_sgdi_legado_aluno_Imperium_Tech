@@ -9,13 +9,29 @@
     <a href="/nova_demanda"><button>+ Nova Demanda</button></a>
 </div>
 
-<div class="tabs">
-    <a class="tab {% if active_tab == 'abertas' %}active{% endif %}" href="/?tab=abertas{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">
-        Em aberto <span class="tab-count">{{ abertas_count }}</span>
-    </a>
-    <a class="tab {% if active_tab == 'finalizadas' %}active{% endif %}" href="/?tab=finalizadas{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">
-        Finalizadas <span class="tab-count">{{ finalizadas_count }}</span>
-    </a>
+<div class="tabs-toolbar">
+    <div class="tabs" role="tablist" aria-label="Status das demandas">
+        <a class="tab {% if active_tab == 'abertas' %}active{% endif %}" href="/?tab=abertas{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if prioridade_filtro|default('') %}&prioridade={{ prioridade_filtro|urlencode }}{% endif %}">
+            Em aberto <span class="tab-count">{{ abertas_count }}</span>
+        </a>
+        <a class="tab {% if active_tab == 'finalizadas' %}active{% endif %}" href="/?tab=finalizadas{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if prioridade_filtro|default('') %}&prioridade={{ prioridade_filtro|urlencode }}{% endif %}">
+            Finalizadas <span class="tab-count">{{ finalizadas_count }}</span>
+        </a>
+    </div>
+</div>
+
+<div class="prioridade-toolbar">
+    <form class="prioridade-filter" method="get" action="/" aria-label="Filtrar por prioridade">
+        <input type="hidden" name="tab" value="{{ active_tab }}">
+        <input type="hidden" name="q" value="{{ search_query|default('') }}">
+        <label for="filtro-prioridade" class="prioridade-filter-label">Prioridade</label>
+        <select id="filtro-prioridade" name="prioridade" onchange="this.form.submit()">
+            <option value="" {% if not prioridade_filtro|default('') %}selected{% endif %}>Todas</option>
+            <option value="alta" {% if prioridade_filtro|default('') == 'alta' %}selected{% endif %}>Alta</option>
+            <option value="media" {% if prioridade_filtro|default('') == 'media' %}selected{% endif %}>Média</option>
+            <option value="baixa" {% if prioridade_filtro|default('') == 'baixa' %}selected{% endif %}>Baixa</option>
+        </select>
+    </form>
 </div>
 
 <div class="table-wrap">

@@ -21,6 +21,9 @@
             <a href="/nova_demanda">Nova demanda</a>
             <form action="/" method="GET" class="search-form">
                 <input type="hidden" name="tab" value="{{ active_tab|default('abertas') }}">
+                {% if prioridade_filtro|default('') %}
+                <input type="hidden" name="prioridade" value="{{ prioridade_filtro }}">
+                {% endif %}
                 <input type="text" name="q" value="{{ search_query|default('') }}" placeholder="Buscar demanda">
                 <button type="submit">Buscar</button>
             </form>
