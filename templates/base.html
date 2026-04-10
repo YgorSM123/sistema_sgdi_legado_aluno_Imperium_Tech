@@ -49,5 +49,210 @@
     <footer class="footer">
         <p>SGDI v1.0</p>
     </footer>
+
+    <div class="modal-overlay" id="confirm-modal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-description">
+            <div class="modal-head">
+                <h3 id="confirm-modal-title">Confirmar finalizacao</h3>
+                <button class="modal-close" type="button" data-modal-close aria-label="Fechar modal">×</button>
+            </div>
+            <p id="confirm-modal-description">Deseja finalizar esta demanda?</p>
+            <div class="modal-actions">
+                <button type="button" data-modal-close>Cancelar</button>
+                <button type="button" class="btn-success" id="confirm-modal-submit">Finalizar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('confirm-modal');
+            const confirmButton = document.getElementById('confirm-modal-submit');
+
+            if (!modal || !confirmButton) {
+                return;
+            }
+
+            let activeForm = null;
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove('modal-open');
+                activeForm = null;
+            };
+
+            const openModal = (form) => {
+                activeForm = form;
+                modal.hidden = false;
+                document.body.classList.add('modal-open');
+                confirmButton.focus();
+            };
+
+            document.addEventListener('click', (event) => {
+                const trigger = event.target.closest('[data-confirm-finalizar]');
+                if (trigger) {
+                    event.preventDefault();
+                    openModal(trigger);
+                    return;
+                }
+
+                if (event.target === modal || event.target.closest('[data-modal-close]')) {
+                    closeModal();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !modal.hidden) {
+                    closeModal();
+                }
+            });
+
+            confirmButton.addEventListener('click', () => {
+                if (!activeForm) {
+                    closeModal();
+                    return;
+                }
+
+                const formToSubmit = activeForm;
+                closeModal();
+                formToSubmit.submit();
+            });
+        })();
+    </script>
+
+    <div class="action-modal-overlay" id="action-modal" hidden>
+        <div
+            class="action-modal-card action-modal-card-primary"
+            id="action-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="action-modal-title"
+            aria-describedby="action-modal-description"
+            tabindex="-1"
+        >
+            <div class="action-modal-glow" aria-hidden="true"></div>
+            <div class="action-modal-head">
+                <div class="action-modal-heading">
+                    <span class="action-modal-kicker" id="action-modal-kicker">Confirmacao</span>
+                    <h3 id="action-modal-title">Confirmar acao</h3>
+                </div>
+                <button class="action-modal-close" type="button" data-action-modal-close aria-label="Fechar modal">&times;</button>
+            </div>
+            <p id="action-modal-description">Revise esta acao antes de continuar.</p>
+            <div class="action-modal-meta">
+                <span class="action-modal-pill action-modal-pill-primary" id="action-modal-pill">Atualizacao</span>
+                <span class="action-modal-note" id="action-modal-note">A alteracao sera aplicada imediatamente.</span>
+            </div>
+            <div class="action-modal-actions">
+                <button type="button" class="action-modal-secondary" data-action-modal-close>Cancelar</button>
+                <button type="button" class="action-modal-confirm action-modal-confirm-primary" id="action-modal-submit">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('action-modal');
+            const modalCard = document.getElementById('action-modal-card');
+            const title = document.getElementById('action-modal-title');
+            const description = document.getElementById('action-modal-description');
+            const kicker = document.getElementById('action-modal-kicker');
+            const pill = document.getElementById('action-modal-pill');
+            const note = document.getElementById('action-modal-note');
+            const confirmButton = document.getElementById('action-modal-submit');
+
+            if (!modal || !modalCard || !title || !description || !kicker || !pill || !note || !confirmButton) {
+                return;
+            }
+
+            const variants = ['primary', 'success', 'danger'];
+            const defaults = {
+                title: 'Confirmar acao',
+                message: 'Revise esta acao antes de continuar.',
+                button: 'Confirmar',
+                kicker: 'Confirmacao',
+                pill: 'Atualizacao',
+                note: 'A alteracao sera aplicada imediatamente.',
+                variant: 'primary',
+            };
+
+            let activeForm = null;
+            let lastFocusedElement = null;
+
+            const applyVariant = (variant) => {
+                const selectedVariant = variants.includes(variant) ? variant : defaults.variant;
+
+                modalCard.classList.remove(...variants.map((item) => `action-modal-card-${item}`));
+                pill.classList.remove(...variants.map((item) => `action-modal-pill-${item}`));
+                confirmButton.classList.remove(...variants.map((item) => `action-modal-confirm-${item}`));
+
+                modalCard.classList.add(`action-modal-card-${selectedVariant}`);
+                pill.classList.add(`action-modal-pill-${selectedVariant}`);
+                confirmButton.classList.add(`action-modal-confirm-${selectedVariant}`);
+            };
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove('modal-open');
+                activeForm = null;
+
+                if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+                    lastFocusedElement.focus();
+                }
+
+                lastFocusedElement = null;
+            };
+
+            const openModal = (form) => {
+                activeForm = form;
+                lastFocusedElement = document.activeElement;
+
+                title.textContent = form.dataset.confirmTitle || defaults.title;
+                description.textContent = form.dataset.confirmMessage || defaults.message;
+                confirmButton.textContent = form.dataset.confirmButton || defaults.button;
+                kicker.textContent = form.dataset.confirmKicker || defaults.kicker;
+                pill.textContent = form.dataset.confirmPill || defaults.pill;
+                note.textContent = form.dataset.confirmNote || defaults.note;
+                applyVariant(form.dataset.confirmVariant || defaults.variant);
+
+                modal.hidden = false;
+                document.body.classList.add('modal-open');
+                modalCard.focus();
+            };
+
+            document.addEventListener('submit', (event) => {
+                const form = event.target;
+                if (!(form instanceof HTMLFormElement) || !form.matches('[data-confirm-modal]')) {
+                    return;
+                }
+
+                event.preventDefault();
+                openModal(form);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (event.target === modal || event.target.closest('[data-action-modal-close]')) {
+                    closeModal();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !modal.hidden) {
+                    closeModal();
+                }
+            });
+
+            confirmButton.addEventListener('click', () => {
+                if (!activeForm) {
+                    closeModal();
+                    return;
+                }
+
+                const formToSubmit = activeForm;
+                closeModal();
+                formToSubmit.submit();
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -1,51 +1,98 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Editar Demanda</h2>
-
-<form method="POST" action="/editar/{{ demanda[0] }}">
+<div class="section-head">
     <div>
-        <label>Titulo:</label><br>
-        <input type="text" name="titulo" value="{{ demanda[1] }}" size="50">
+        <p class="page-kicker">Demanda #{{ demanda[0] }}</p>
+        <h2>Editar Demanda</h2>
+        <p class="muted page-copy">Atualize os dados principais com mais contexto e mantenha a demanda organizada para o restante do time.</p>
     </div>
-    <br>
-
-    <div>
-        <label>Descricao:</label><br>
-        <textarea name="descricao" rows="5" cols="50">{{ demanda[2] }}</textarea>
+    <div class="page-actions">
+        <a class="btn-link" href="/detalhes/{{ demanda[0] }}">Ver detalhes</a>
+        <a class="btn-link" href="/">Voltar para lista</a>
     </div>
-    <br>
+</div>
 
-    <div>
-        <label>Solicitante:</label><br>
-        <input type="text" name="solicitante" value="{{ demanda[3] }}">
+<form
+    class="editor-layout"
+    method="POST"
+    action="/editar/{{ demanda[0] }}"
+    data-confirm-modal
+    data-confirm-title="Atualizar demanda"
+    data-confirm-message="Deseja salvar as alteracoes feitas nesta demanda?"
+    data-confirm-button="Atualizar"
+    data-confirm-kicker="Salvar alteracoes"
+    data-confirm-pill="Atualizacao"
+    data-confirm-note="Os novos dados ficarao visiveis assim que a atualizacao for concluida."
+    data-confirm-variant="primary"
+>
+    <section class="surface-card form-panel">
+        <div class="panel-head">
+            <h3>Informacoes principais</h3>
+            <p>Revise os dados abaixo antes de salvar. Quanto mais claro o cadastro, mais facil acompanhar o andamento da demanda.</p>
+        </div>
+
+        <div class="editor-grid">
+            <div class="field-block field-span-2">
+                <label for="titulo">Titulo</label>
+                <input id="titulo" type="text" name="titulo" value="{{ demanda[1] }}">
+            </div>
+
+            <div class="field-block field-span-2">
+                <label for="descricao">Descricao</label>
+                <textarea id="descricao" name="descricao" rows="7">{{ demanda[2] }}</textarea>
+                <p class="field-hint">Use a descricao para explicar o objetivo, o contexto e o resultado esperado.</p>
+            </div>
+
+            <div class="field-block">
+                <label for="solicitante">Solicitante</label>
+                <input id="solicitante" type="text" name="solicitante" value="{{ demanda[3] }}">
+            </div>
+
+            <div class="field-block">
+                <label for="prioridade">Prioridade</label>
+                <select id="prioridade" name="prioridade">
+                    <option value="alta" {% if demanda[5] == 'alta' %}selected{% endif %}>Alta</option>
+                    <option value="media" {% if demanda[5] == 'media' %}selected{% endif %}>Media</option>
+                    <option value="baixa" {% if demanda[5] == 'baixa' %}selected{% endif %}>Baixa</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <aside class="surface-card form-panel form-panel-soft">
+        <div class="panel-head">
+            <h3>Resumo rapido</h3>
+            <p>Essas informacoes ajudam a validar rapidamente o contexto atual da demanda antes da atualizacao.</p>
+        </div>
+
+        <div class="meta-grid">
+            <div class="meta-box">
+                <span class="meta-label">ID</span>
+                <strong class="meta-value">#{{ demanda[0] }}</strong>
+            </div>
+            <div class="meta-box">
+                <span class="meta-label">Status</span>
+                <strong class="meta-value">
+                    <span class="badge {{ demanda[6]|lower }}">{{ demanda[6] }}</span>
+                </strong>
+            </div>
+            <div class="meta-box">
+                <span class="meta-label">Prioridade atual</span>
+                <strong class="meta-value">
+                    <span class="badge {{ demanda[5] }}">{{ demanda[5] }}</span>
+                </strong>
+            </div>
+            <div class="meta-box">
+                <span class="meta-label">Criada em</span>
+                <strong class="meta-value">{{ demanda[4] }}</strong>
+            </div>
+        </div>
+    </aside>
+
+    <div class="form-actions-bar">
+        <a class="btn-link" href="/detalhes/{{ demanda[0] }}">Cancelar</a>
+        <button type="submit">Atualizar demanda</button>
     </div>
-    <br>
-
-    <div>
-        <label>Prioridade:</label><br>
-        <select name="prioridade">
-            <option value="alta" {% if demanda[5] == 'alta' %}selected{% endif %}>Alta</option>
-            <option value="media" {% if demanda[5] == 'media' %}selected{% endif %}>Media</option>
-            <option value="baixa" {% if demanda[5] == 'baixa' %}selected{% endif %}>Baixa</option>
-        </select>
-    </div>
-    <br>
-
-    <div>
-        <label>Data de Criacao:</label><br>
-        <input type="text" value="{{ demanda[4] }}" disabled>
-    </div>
-    <br>
-
-    <div>
-        <label>Status:</label><br>
-        <input type="text" value="{{ demanda[6] }}" disabled>
-    </div>
-    <br>
-
-    <button type="submit">Atualizar</button>
-    <a href="/"><button type="button">Cancelar</button></a>
 </form>
-
 {% endblock %}

@@ -62,11 +62,35 @@
                             <a class="btn-link" href="/detalhes/{{ demanda[0] }}">Ver</a>
                             <a class="btn-link" href="/editar/{{ demanda[0] }}">Editar</a>
                             {% if demanda[6] != 'Finalizada' %}
-                            <form class="table-actions-form" action="/finalizar/{{ demanda[0] }}" method="POST" onsubmit="return confirm('Deseja finalizar esta demanda?');">
+                            <form
+                                class="table-actions-form"
+                                action="/finalizar/{{ demanda[0] }}"
+                                method="POST"
+                                data-confirm-modal
+                                data-confirm-title="Finalizar demanda"
+                                data-confirm-message="Essa demanda sera movida para a lista de finalizadas."
+                                data-confirm-button="Finalizar"
+                                data-confirm-kicker="Mudanca de status"
+                                data-confirm-pill="Finalizacao"
+                                data-confirm-note="Voce ainda podera consultar a demanda na aba de finalizadas."
+                                data-confirm-variant="success"
+                            >
                                 <button class="btn-success" type="submit">Finalizar</button>
                             </form>
                             {% endif %}
-                            <form class="table-actions-form" action="/deletar/{{ demanda[0] }}" method="POST" onsubmit="return confirm('Deseja realmente deletar esta demanda?');">
+                            <form
+                                class="table-actions-form"
+                                action="/deletar/{{ demanda[0] }}"
+                                method="POST"
+                                data-confirm-modal
+                                data-confirm-title="Deletar demanda"
+                                data-confirm-message="Essa acao remove a demanda e os comentarios vinculados a ela."
+                                data-confirm-button="Deletar"
+                                data-confirm-kicker="Acao permanente"
+                                data-confirm-pill="Exclusao"
+                                data-confirm-note="Use esta opcao apenas quando tiver certeza de que a demanda nao deve permanecer no historico."
+                                data-confirm-variant="danger"
+                            >
                                 <button class="btn-danger" type="submit">Deletar</button>
                             </form>
                         </div>
