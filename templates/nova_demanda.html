@@ -6,28 +6,33 @@
 <form method="POST" action="/nova_demanda">
     <div>
         <label>Titulo:</label><br>
-        <input type="text" name="titulo" size="50">
+        <input type="text" name="titulo" size="50" value="{{ form_data.get('titulo', '') if form_data else '' }}" required>
     </div>
     <br>
 
     <div>
         <label>Descricao:</label><br>
-        <textarea name="descricao" rows="5" cols="50"></textarea>
+        <textarea name="descricao" rows="5" cols="50" required>{{ form_data.get('descricao', '') if form_data else '' }}</textarea>
     </div>
     <br>
 
     <div>
         <label>Solicitante:</label><br>
-        <input type="text" name="solicitante">
+        <select name="solicitante_id" required>
+            <option value="" {% if not selected_solicitante_id %}selected{% endif %} disabled>Selecione um usuario</option>
+            {% for usuario in usuarios %}
+            <option value="{{ usuario['id'] }}" {% if selected_solicitante_id == usuario['id'] %}selected{% endif %}>{{ usuario['nome'] }}</option>
+            {% endfor %}
+        </select>
     </div>
     <br>
 
     <div>
         <label>Prioridade:</label><br>
         <select name="prioridade">
-            <option value="alta">Alta</option>
-            <option value="media" selected>Media</option>
-            <option value="baixa">Baixa</option>
+            <option value="alta" {% if form_data and form_data.get('prioridade') == 'alta' %}selected{% endif %}>Alta</option>
+            <option value="media" {% if not form_data or form_data.get('prioridade', 'media') == 'media' %}selected{% endif %}>Media</option>
+            <option value="baixa" {% if form_data and form_data.get('prioridade') == 'baixa' %}selected{% endif %}>Baixa</option>
         </select>
     </div>
     <br>

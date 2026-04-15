@@ -35,26 +35,30 @@
         <div class="editor-grid">
             <div class="field-block field-span-2">
                 <label for="titulo">Titulo</label>
-                <input id="titulo" type="text" name="titulo" value="{{ demanda[1] }}">
+                <input id="titulo" type="text" name="titulo" value="{{ form_data.get('titulo') if form_data else demanda[1] }}" required>
             </div>
 
             <div class="field-block field-span-2">
                 <label for="descricao">Descricao</label>
-                <textarea id="descricao" name="descricao" rows="7">{{ demanda[2] }}</textarea>
+                <textarea id="descricao" name="descricao" rows="7" required>{{ form_data.get('descricao') if form_data else demanda[2] }}</textarea>
                 <p class="field-hint">Use a descricao para explicar o objetivo, o contexto e o resultado esperado.</p>
             </div>
 
             <div class="field-block">
                 <label for="solicitante">Solicitante</label>
-                <input id="solicitante" type="text" name="solicitante" value="{{ demanda[3] }}">
+                <select id="solicitante" name="solicitante_id" required>
+                    {% for usuario in usuarios %}
+                    <option value="{{ usuario['id'] }}" {% if selected_solicitante_id == usuario['id'] %}selected{% endif %}>{{ usuario['nome'] }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="field-block">
                 <label for="prioridade">Prioridade</label>
                 <select id="prioridade" name="prioridade">
-                    <option value="alta" {% if demanda[5] == 'alta' %}selected{% endif %}>Alta</option>
-                    <option value="media" {% if demanda[5] == 'media' %}selected{% endif %}>Media</option>
-                    <option value="baixa" {% if demanda[5] == 'baixa' %}selected{% endif %}>Baixa</option>
+                    <option value="alta" {% if (form_data.get('prioridade') if form_data else demanda[5]) == 'alta' %}selected{% endif %}>Alta</option>
+                    <option value="media" {% if (form_data.get('prioridade') if form_data else demanda[5]) == 'media' %}selected{% endif %}>Media</option>
+                    <option value="baixa" {% if (form_data.get('prioridade') if form_data else demanda[5]) == 'baixa' %}selected{% endif %}>Baixa</option>
                 </select>
             </div>
         </div>

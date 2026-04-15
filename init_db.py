@@ -2,15 +2,36 @@ import os
 import sqlite3
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "demandas_store.db")
+DB_PATH = os.path.join(BASE_DIR, "demandas_store_runtime.db")
+
+DEFAULT_USERS = (
+    "Joao Silva",
+    "Maria Santos",
+    "Pedro Costa",
+    "Ana Lima",
+    "Carla Souza",
+)
 
 
 def main():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("PRAGMA journal_mode = OFF")
-    cursor.execute("PRAGMA synchronous = OFF")
+    cursor.execute("PRAGMA journal_mode = MEMORY")
     cursor.execute("PRAGMA foreign_keys = ON")
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL UNIQUE
+        )
+        """
+    )
+
+    cursor.executemany(
+        "INSERT OR IGNORE INTO usuarios (nome) VALUES (?)",
+        [(name,) for name in DEFAULT_USERS],
+    )
 
     cursor.execute(
         """
@@ -18,10 +39,11 @@ def main():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             titulo TEXT NOT NULL,
             descricao TEXT NOT NULL,
-            solicitante TEXT NOT NULL,
+            solicitante_id INTEGER NOT NULL,
             data_criacao TEXT NOT NULL,
             prioridade TEXT NOT NULL DEFAULT 'media',
-            status TEXT NOT NULL DEFAULT 'Aberta'
+            status TEXT NOT NULL DEFAULT 'Aberta',
+            FOREIGN KEY (solicitante_id) REFERENCES usuarios(id)
         )
         """
     )
@@ -39,17 +61,24 @@ def main():
         """
     )
 
+    usuarios = {
+        nome: user_id
+        for user_id, nome in cursor.execute("SELECT id, nome FROM usuarios").fetchall()
+    }
+
     if cursor.execute("SELECT COUNT(*) FROM demandas").fetchone()[0] == 0:
         cursor.executemany(
             """
-            INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, status)
+            INSERT INTO demandas (
+                id, titulo, descricao, solicitante_id, data_criacao, prioridade, status
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                (1, "Corrigir bug no login", "Usuarios nao conseguem fazer login", "Joao Silva", "2024-01-15 10:30:00", "alta", "Aberta"),
-                (2, "Implementar relatorio de vendas", "Precisamos de um relatorio mensal", "Maria Santos", "2024-01-16 14:20:00", "media", "Aberta"),
-                (3, "Melhorar performance", "Sistema esta lento", "Pedro Costa", "2024-01-17 09:15:00", "alta", "Aberta"),
-                (5, "Adicionar filtros", "Usuarios querem filtrar demandas", "Ana Lima", "2024-01-18 11:00:00", "baixa", "Aberta"),
+                (1, "Corrigir bug no login", "Usuarios nao conseguem fazer login", usuarios["Joao Silva"], "2024-01-15 10:30:00", "alta", "Aberta"),
+                (2, "Implementar relatorio de vendas", "Precisamos de um relatorio mensal", usuarios["Maria Santos"], "2024-01-16 14:20:00", "media", "Aberta"),
+                (3, "Melhorar performance", "Sistema esta lento", usuarios["Pedro Costa"], "2024-01-17 09:15:00", "alta", "Aberta"),
+                (5, "Adicionar filtros", "Usuarios querem filtrar demandas", usuarios["Ana Lima"], "2024-01-18 11:00:00", "baixa", "Aberta"),
             ],
         )
 
