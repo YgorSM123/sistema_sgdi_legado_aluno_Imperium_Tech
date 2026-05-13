@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-shell">
+    <div class="dashboard-hero">
+        <div>
+            <p class="dashboard-kicker">{{ company_name }}</p>
+            <h2>Dashboard de demandas</h2>
+            <p>Gerado em {{ generated_at }} · SLA de {{ sla_days }} dias para demandas abertas.</p>
+        </div>
+        <div class="dashboard-export-note">
+            <span>Relatorio</span>
+            <strong>PDF ou CSV</strong>
+        </div>
+    </div>
+
+    <form class="dashboard-filters" method="get" action="/dashboard" id="dashboard-filter-form">
+        <div class="dashboard-filter-field">
+            <label for="periodo">Periodo</label>
+            <select id="periodo" name="periodo">
+                {% for value, periodo in periodos.items() %}
+                <option value="{{ value }}" {% if filters.periodo == value %}selected{% endif %}>{{ periodo.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="dashboard-filter-field">
+            <label for="responsavel">Responsavel</label>
+            <select id="responsavel" name="responsavel">
+                <option value="">Todos</option>
+                {% for usuario in usuarios %}
+                <option value="{{ usuario['id'] }}" {% if filters.responsavel == usuario['id'] %}selected{% endif %}>{{ usuario['nome'] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="dashboard-filter-field">
+            <label for="dash-prioridade">Prioridade</label>
+            <select id="dash-prioridade" name="prioridade">
+                <option value="">Todas</option>
+                <option value="alta" {% if filters.prioridade == 'alta' %}selected{% endif %}>Alta</option>
+                <option value="media" {% if filters.prioridade == 'media' %}selected{% endif %}>Media</option>
+                <option value="baixa" {% if filters.prioridade == 'baixa' %}selected{% endif %}>Baixa</option>
+            </select>
+        </div>
+        <div class="dashboard-filter-field">
+            <label for="dash-status">Status</label>
+            <select id="dash-status" name="status">
+                <option value="">Todos</option>
+                <option value="aberta" {% if filters.status == 'aberta' %}selected{% endif %}>Aberta</option>
+                <option value="finalizada" {% if filters.status == 'finalizada' %}selected{% endif %}>Concluida</option>
+                <option value="atrasada" {% if filters.status == 'atrasada' %}selected{% endif %}>Atrasada</option>
+            </select>
+        </div>
+        <div class="dashboard-filter-actions">
+            <button type="submit" id="dashboard-filter-submit">Aplicar</button>
+            <button type="submit" formaction="/dashboard/export" name="formato" value="csv" class="dashboard-export-button">CSV</button>
+            <button type="submit" formaction="/dashboard/export" name="formato" value="pdf" class="dashboard-export-button">PDF</button>
+        </div>
+    </form>
+
+    <div class="dashboard-report-meta">
+        <span>Filtros aplicados no rodape do relatorio</span>
+        <strong>{{ filters_label }}</strong>
+    </div>
+
+    <section class="dashboard-kpi-grid" aria-label="Indicadores principais">
+        <article class="dashboard-kpi-card dashboard-kpi-total">
+            <span>Total de demandas</span>
+            <strong>{{ kpis.total }}</strong>
+            <small>Numero em destaque, visivel de longe</small>
+        </article>
+        <article class="dashboard-kpi-card">
+            <span>Abertas</span>
+            <strong>{{ kpis.abertas }}</strong>
+            <small>{{ por_status[0].percent }}% do recorte atual</small>
+        </article>
+        <article class="dashboard-kpi-card">
+            <span>Concluidas</span>
+            <strong>{{ kpis.concluidas }}</strong>
+            <small>{{ por_status[1].percent }}% do recorte atual</small>
+        </article>
+        <article class="dashboard-kpi-card dashboard-kpi-danger">
+            <span>Atrasadas</span>
+            <strong>{{ kpis.atrasadas }}</strong>
+            <small>Em vermelho no painel</small>
+        </article>
+        <article class="dashboard-kpi-card dashboard-kpi-warning">
+            <span>Criticas atrasadas</span>
+            <strong>{{ kpis.criticas }}</strong>
+            <small>Alta prioridade e fora do SLA</small>
+        </article>
+        <article class="dashboard-kpi-card">
+            <span>Tempo medio</span>
+            <strong>{{ kpis.tempo_medio }}</strong>
+            <small>Dias ate conclusao</small>
+        </article>
+    </section>
+
+    <section class="dashboard-critical-spotlight">
+        <div class="dashboard-panel-head">
+            <span>Atencao maxima</span>
+            <h3>Demandas criticas atrasadas</h3>
+        </div>
+        <div class="dashboard-spotlight-copy">
+            <strong>{{ kpis.criticas }}</strong>
+            <p>Casos de prioridade alta que ultrapassaram o SLA de {{ sla_days }} dias. O relatorio exportado traz somente esta lista.</p>
+        </div>
+        {% if criticas %}
+        <div class="dashboard-critical-list dashboard-critical-list-spotlight">
+            {% for demanda in criticas %}
+            <a href="/detalhes/{{ demanda.id }}" class="dashboard-critical-item dashboard-critical-item-hot">
+                <div>
+                    <span>#{{ demanda.id }} - {{ demanda.solicitante }}</span>
+                    <strong>{{ demanda.titulo }}</strong>
+                    <small>{{ demanda.idade_dias }} dias em aberto</small>
+                </div>
+                <div>
+                    <small class="badge {{ demanda.prioridade }}">{{ demanda.prioridade }}</small>
+                    <small class="dashboard-critical-status late">Atrasada</small>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="dashboard-empty">Nenhuma demanda critica atrasada nos filtros atuais.</p>
+        {% endif %}
+    </section>
+
+    <section class="dashboard-grid">
+        <article class="dashboard-panel dashboard-panel-cyan">
+            <div class="dashboard-panel-head">
+                <span>Graficos obrigatorios</span>
+                <h3>Por status</h3>
+            </div>
+            <div class="dashboard-bars">
+                {% for item in por_status %}
+                <div class="dashboard-bar-row dashboard-bar-{{ item.class }}">
+                    <div>
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                    </div>
+                    <div class="dashboard-bar-track">
+                        <span style="width: {{ item.percent }}%"></span>
+                    </div>
+                    <em>{{ item.percent }}%</em>
+                </div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="dashboard-panel dashboard-panel-yellow">
+            <div class="dashboard-panel-head">
+                <span>Visual</span>
+                <h3>Por prioridade</h3>
+            </div>
+            <div class="dashboard-priority-stack">
+                {% for item in por_prioridade %}
+                <div class="dashboard-priority dashboard-priority-{{ item.class }}">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <small>{{ item.percent }}%</small>
+                </div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="dashboard-panel dashboard-panel-red">
+            <div class="dashboard-panel-head">
+                <span>Logica</span>
+                <h3>Evolucao temporal</h3>
+            </div>
+            {% if evolucao_temporal %}
+            <div class="dashboard-timeline">
+                {% for item in evolucao_temporal %}
+                <div class="dashboard-timeline-item">
+                    <span style="height: {{ item.percent }}%"></span>
+                    <small>{{ item.label }}</small>
+                    <strong>{{ item.value }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="dashboard-empty">Sem dados no periodo selecionado.</p>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="dashboard-grid dashboard-grid-bottom dashboard-grid-single">
+        <article class="dashboard-panel">
+            <div class="dashboard-panel-head">
+                <span>KPI</span>
+                <h3>Por responsavel</h3>
+            </div>
+            <div class="dashboard-responsible-list">
+                {% for item in abertas_por_responsavel %}
+                <div class="dashboard-responsible-row">
+                    <div>
+                        <span>{{ item.nome }}</span>
+                        <strong>{{ item.value }} abertas</strong>
+                    </div>
+                    <div class="dashboard-bar-track">
+                        <span style="width: {{ item.percent }}%"></span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </article>
+    </section>
+</div>
+
+<script>
+    (() => {
+        const form = document.getElementById('dashboard-filter-form');
+        const submitButton = document.getElementById('dashboard-filter-submit');
+        if (!form || !submitButton) {
+            return;
+        }
+
+        form.querySelectorAll('select').forEach((field) => {
+            field.addEventListener('change', () => {
+                submitButton.click();
+            });
+        });
+    })();
+</script>
+{% endblock %}

@@ -1,10 +1,12 @@
+import csv
 import glob
+import io
 import os
 import shutil
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import Flask, abort, flash, redirect, render_template, request
+from flask import Flask, Response, abort, flash, redirect, render_template, request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEGACY_DB_PATH = os.path.join(BASE_DIR, "demandas_store.db")
@@ -20,6 +22,16 @@ DEFAULT_USERS = (
     "Ana Lima",
     "Carla Souza",
 )
+
+COMPANY_NAME = "Imperium Tech"
+SLA_DAYS = 7
+STATUS_VALIDOS = frozenset(("Aberta", "Finalizada"))
+PERIODOS_DASHBOARD = {
+    "7d": {"label": "7 dias", "days": 7},
+    "1m": {"label": "1 mes", "days": 30},
+    "3m": {"label": "3 meses", "days": 90},
+    "6m": {"label": "6 meses", "days": 180},
+}
 
 
 def _sqlite_file_is_usable(db_path):
@@ -126,6 +138,49 @@ def _normalizar_prioridade(prioridade, default="media"):
     return prioridade
 
 
+def _parse_datetime(value):
+    if not value:
+        return None
+
+    for date_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, date_format)
+        except ValueError:
+            continue
+    return None
+
+
+def _normalizar_periodo(periodo):
+    periodo = (periodo or "7d").strip().lower()
+    if periodo not in PERIODOS_DASHBOARD:
+        return "7d"
+    return periodo
+
+
+def _periodo_range(periodo, now):
+    period_config = PERIODOS_DASHBOARD[periodo]
+    return now.date() - timedelta(days=period_config["days"]), now.date()
+
+
+def _normalizar_status_filtro(status):
+    status = (status or "").strip().lower()
+    if status in ("aberta", "abertas"):
+        return "aberta"
+    if status in ("finalizada", "finalizadas", "concluida", "concluidas"):
+        return "finalizada"
+    if status in ("atrasada", "atrasadas"):
+        return "atrasada"
+    return ""
+
+
+def _parse_int_filter(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return ""
+    return parsed if parsed > 0 else ""
+
+
 def _schema_needs_migration(conn):
     return not (
         _column_is_primary_key(conn, "usuarios", "id")
@@ -158,6 +213,8 @@ def _collect_demandas_rows(conn):
         select_columns.append("prioridade")
     if _column_exists(conn, "demandas", "status"):
         select_columns.append("status")
+    if _column_exists(conn, "demandas", "data_finalizacao"):
+        select_columns.append("data_finalizacao")
 
     sql = f"SELECT {', '.join(select_columns)} FROM demandas ORDER BY id"
     return conn.execute(sql).fetchall()
@@ -171,6 +228,7 @@ def ensure_database():
 
         needs_priority = not _column_exists(conn, "demandas", "prioridade")
         needs_status = not _column_exists(conn, "demandas", "status")
+        needs_finished_at = not _column_exists(conn, "demandas", "data_finalizacao")
 
         if not _schema_needs_migration(conn):
             if needs_priority:
@@ -181,6 +239,8 @@ def ensure_database():
                 conn.execute(
                     "ALTER TABLE demandas ADD COLUMN status TEXT NOT NULL DEFAULT 'Aberta'"
                 )
+            if needs_finished_at:
+                conn.execute("ALTER TABLE demandas ADD COLUMN data_finalizacao TEXT")
             _seed_default_users(conn)
             conn.commit()
             return
@@ -228,6 +288,7 @@ def ensure_database():
                 data_criacao TEXT NOT NULL,
                 prioridade TEXT NOT NULL DEFAULT 'media',
                 status TEXT NOT NULL DEFAULT 'Aberta',
+                data_finalizacao TEXT,
                 FOREIGN KEY (solicitante_id) REFERENCES usuarios(id)
             )
             """
@@ -287,6 +348,7 @@ def ensure_database():
                     row["data_criacao"],
                     row["prioridade"] if "prioridade" in row.keys() and row["prioridade"] else "media",
                     row["status"] if "status" in row.keys() and row["status"] else "Aberta",
+                    row["data_finalizacao"] if "data_finalizacao" in row.keys() else None,
                 )
             )
 
@@ -294,9 +356,9 @@ def ensure_database():
             conn.executemany(
                 """
                 INSERT INTO demandas (
-                    id, titulo, descricao, solicitante_id, data_criacao, prioridade, status
+                    id, titulo, descricao, solicitante_id, data_criacao, prioridade, status, data_finalizacao
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 demandas_migradas,
             )
@@ -395,6 +457,361 @@ def render_index():
         abertas_count=abertas_count,
         finalizadas_count=finalizadas_count,
     )
+
+
+def _fetch_dashboard_rows(conn):
+    return conn.execute(
+        """
+        SELECT
+            d.id,
+            d.titulo,
+            d.descricao,
+            d.data_criacao,
+            d.data_finalizacao,
+            d.prioridade,
+            d.status,
+            d.solicitante_id,
+            u.nome AS solicitante
+        FROM demandas d
+        JOIN usuarios u ON u.id = d.solicitante_id
+        ORDER BY d.data_criacao DESC, d.id DESC
+        """
+    ).fetchall()
+
+
+def _dashboard_filters(args, now):
+    periodo = _normalizar_periodo(args.get("periodo"))
+    inicio, fim = _periodo_range(periodo, now)
+    return {
+        "periodo": periodo,
+        "periodo_label": PERIODOS_DASHBOARD[periodo]["label"],
+        "inicio": inicio,
+        "fim": fim,
+        "responsavel": _parse_int_filter(args.get("responsavel")),
+        "prioridade": _normalizar_prioridade(args.get("prioridade"), default=""),
+        "status": _normalizar_status_filtro(args.get("status")),
+    }
+
+
+def _is_overdue(created_at, status, now):
+    if status != "Aberta" or created_at is None:
+        return False
+    return created_at.date() < (now.date() - timedelta(days=SLA_DAYS))
+
+
+def _filter_dashboard_rows(rows, filters, now):
+    filtered = []
+    for row in rows:
+        created_at = _parse_datetime(row["data_criacao"])
+        finished_at = _parse_datetime(row["data_finalizacao"])
+        overdue = _is_overdue(created_at, row["status"], now)
+
+        if filters["inicio"] and (created_at is None or created_at.date() < filters["inicio"]):
+            continue
+        if filters["fim"] and (created_at is None or created_at.date() > filters["fim"]):
+            continue
+        if filters["responsavel"] and row["solicitante_id"] != filters["responsavel"]:
+            continue
+        if filters["prioridade"] and row["prioridade"] != filters["prioridade"]:
+            continue
+        if filters["status"] == "aberta" and row["status"] != "Aberta":
+            continue
+        if filters["status"] == "finalizada" and row["status"] != "Finalizada":
+            continue
+        if filters["status"] == "atrasada" and not overdue:
+            continue
+
+        resolution_days = None
+        if row["status"] == "Finalizada" and created_at and finished_at:
+            resolution_days = max((finished_at - created_at).days, 0)
+
+        filtered.append(
+            {
+                "id": row["id"],
+                "titulo": row["titulo"],
+                "descricao": row["descricao"],
+                "data_criacao": row["data_criacao"],
+                "data_finalizacao": row["data_finalizacao"],
+                "prioridade": row["prioridade"],
+                "status": row["status"],
+                "solicitante_id": row["solicitante_id"],
+                "solicitante": row["solicitante"],
+                "created_at": created_at,
+                "finished_at": finished_at,
+                "atrasada": overdue,
+                "idade_dias": max((now - created_at).days, 0) if created_at else 0,
+                "tempo_resolucao": resolution_days,
+            }
+        )
+    return filtered
+
+
+def _percent(value, total):
+    if total <= 0:
+        return 0
+    return round((value / total) * 100)
+
+
+def _filters_label(filters, usuarios):
+    user_names = {usuario["id"]: usuario["nome"] for usuario in usuarios}
+    parts = []
+    parts.append(f"Periodo: {filters['periodo_label']}")
+    parts.append(f"Responsavel: {user_names.get(filters['responsavel'], 'Todos')}")
+    parts.append(f"Prioridade: {filters['prioridade'].title() if filters['prioridade'] else 'Todas'}")
+    parts.append(f"Status: {filters['status'].title() if filters['status'] else 'Todos'}")
+    return " | ".join(parts)
+
+
+def _build_dashboard_context(args):
+    now = datetime.now()
+    conn = get_db()
+    usuarios = _list_users(conn)
+    rows = _fetch_dashboard_rows(conn)
+    conn.close()
+
+    filters = _dashboard_filters(args, now)
+    demandas = _filter_dashboard_rows(rows, filters, now)
+    total = len(demandas)
+    abertas = sum(1 for demanda in demandas if demanda["status"] == "Aberta")
+    concluidas = sum(1 for demanda in demandas if demanda["status"] == "Finalizada")
+    atrasadas = sum(1 for demanda in demandas if demanda["atrasada"])
+    criticas_atrasadas = [
+        demanda
+        for demanda in demandas
+        if demanda["prioridade"] == "alta" and demanda["atrasada"]
+    ]
+    criticas_atrasadas.sort(
+        key=lambda demanda: (
+            -demanda["idade_dias"],
+            demanda["titulo"],
+        )
+    )
+
+    por_status = [
+        {"label": "Abertas", "value": abertas, "percent": _percent(abertas, total), "class": "open"},
+        {"label": "Concluidas", "value": concluidas, "percent": _percent(concluidas, total), "class": "done"},
+        {"label": "Atrasadas", "value": atrasadas, "percent": _percent(atrasadas, total), "class": "late"},
+    ]
+    por_prioridade = []
+    for prioridade in ("alta", "media", "baixa"):
+        value = sum(1 for demanda in demandas if demanda["prioridade"] == prioridade)
+        por_prioridade.append(
+            {
+                "label": prioridade.title(),
+                "value": value,
+                "percent": _percent(value, total),
+                "class": prioridade,
+            }
+        )
+
+    abertas_por_responsavel = []
+    max_open = 1
+    for usuario in usuarios:
+        value = sum(
+            1
+            for demanda in demandas
+            if demanda["solicitante_id"] == usuario["id"] and demanda["status"] == "Aberta"
+        )
+        max_open = max(max_open, value)
+        abertas_por_responsavel.append({"nome": usuario["nome"], "value": value})
+    for item in abertas_por_responsavel:
+        item["percent"] = _percent(item["value"], max_open)
+
+    resolved_days = [
+        demanda["tempo_resolucao"]
+        for demanda in demandas
+        if demanda["tempo_resolucao"] is not None
+    ]
+    tempo_medio = round(sum(resolved_days) / len(resolved_days), 1) if resolved_days else 0
+
+    temporal = {}
+    for demanda in demandas:
+        if demanda["created_at"] is None:
+            continue
+        key = demanda["created_at"].strftime("%Y-%m")
+        temporal[key] = temporal.get(key, 0) + 1
+    evolucao_temporal = [
+        {"label": key, "value": value}
+        for key, value in sorted(temporal.items())
+    ]
+    temporal_max = max([item["value"] for item in evolucao_temporal] or [1])
+    for item in evolucao_temporal:
+        item["percent"] = _percent(item["value"], temporal_max)
+
+    filters_label = _filters_label(filters, usuarios)
+    generated_at = now.strftime("%d/%m/%Y %H:%M")
+
+    return {
+        "company_name": COMPANY_NAME,
+        "generated_at": generated_at,
+        "filters": filters,
+        "periodos": PERIODOS_DASHBOARD,
+        "filters_label": filters_label,
+        "usuarios": usuarios,
+        "demandas": demandas,
+        "kpis": {
+            "total": total,
+            "abertas": abertas,
+            "concluidas": concluidas,
+            "atrasadas": atrasadas,
+            "criticas": len(criticas_atrasadas),
+            "tempo_medio": tempo_medio,
+        },
+        "por_status": por_status,
+        "por_prioridade": por_prioridade,
+        "abertas_por_responsavel": abertas_por_responsavel,
+        "evolucao_temporal": evolucao_temporal,
+        "criticas_atrasadas": criticas_atrasadas,
+        "criticas": criticas_atrasadas[:8],
+        "sla_days": SLA_DAYS,
+    }
+
+
+def _csv_dashboard_response(context):
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([COMPANY_NAME])
+    writer.writerow(["Relatorio gerado em", context["generated_at"]])
+    writer.writerow(["Filtros aplicados", context["filters_label"]])
+    writer.writerow(["Escopo", "Somente demandas criticas atrasadas"])
+    writer.writerow([])
+    writer.writerow(["ID", "Titulo", "Solicitante", "Prioridade", "Status", "Dias em aberto", "Criada em"])
+    for demanda in context["criticas_atrasadas"]:
+        writer.writerow(
+            [
+                demanda["id"],
+                demanda["titulo"],
+                demanda["solicitante"],
+                demanda["prioridade"],
+                demanda["status"],
+                demanda["idade_dias"],
+                demanda["data_criacao"],
+            ]
+        )
+    payload = "\ufeff" + output.getvalue()
+    return Response(
+        payload,
+        content_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=dashboard_sgdi.csv"},
+    )
+
+
+def _escape_pdf_text(text):
+    return str(text).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _pdf_from_lines(lines):
+    page_width = 595.28
+    page_height = 841.89
+    margin = 54
+    line_height = 15
+    pages = []
+    page_lines = []
+    y = page_height - margin
+    for line in lines:
+        if y < margin:
+            pages.append(page_lines)
+            page_lines = []
+            y = page_height - margin
+        page_lines.append((line, y))
+        y -= line_height
+    pages.append(page_lines)
+
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [] /Count 0 >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    ]
+    page_ids = []
+    for page_index, page in enumerate(pages, start=1):
+        content = []
+        for line, y in page:
+            font = "F2" if line.startswith("# ") else "F1"
+            size = 13 if font == "F2" else 10
+            text = line[2:] if line.startswith("# ") else line
+            content.append(
+                f"BT /{font} {size} Tf 1 0 0 1 {margin:.2f} {y:.2f} Tm ({_escape_pdf_text(text)}) Tj ET"
+            )
+        content.append(
+            f"BT /F1 9 Tf 1 0 0 1 {page_width - margin - 30:.2f} 26.00 Tm ({page_index}) Tj ET"
+        )
+        stream = "\n".join(content).encode("latin-1", "replace")
+        content_id = len(objects) + 1
+        objects.append(b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream")
+        page_id = len(objects) + 1
+        objects.append(
+            (
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width:.2f} {page_height:.2f}] "
+                f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>"
+            ).encode("ascii")
+        )
+        page_ids.append(page_id)
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode("ascii")
+
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{index} 0 obj\n".encode("ascii"))
+        output.extend(obj)
+        output.extend(b"\nendobj\n")
+    xref_start = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        (
+            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref_start}\n%%EOF\n"
+        ).encode("ascii")
+    )
+    return bytes(output)
+
+
+def _pdf_dashboard_response(context):
+    lines = [
+        f"# {COMPANY_NAME} - Dashboard SGDI",
+        f"Relatorio gerado em: {context['generated_at']}",
+        f"Filtros aplicados: {context['filters_label']}",
+        "",
+        "# Indicadores",
+        f"Demandas criticas atrasadas: {context['kpis']['criticas']}",
+        f"Regra: prioridade alta e fora do SLA de {SLA_DAYS} dias",
+        "",
+        "# Demandas criticas atrasadas",
+    ]
+    if context["criticas_atrasadas"]:
+        for demanda in context["criticas_atrasadas"]:
+            lines.append(
+                f"#{demanda['id']} - {demanda['titulo']} | {demanda['solicitante']} | "
+                f"{demanda['prioridade']} | {demanda['status']} | {demanda['idade_dias']} dias em aberto"
+            )
+    else:
+        lines.append("Nenhuma demanda critica atrasada nos filtros atuais.")
+
+    pdf = _pdf_from_lines(lines)
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=dashboard_sgdi.pdf"},
+    )
+
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html', **_build_dashboard_context(request.args))
+
+
+@app.route('/dashboard/export')
+def dashboard_export():
+    context = _build_dashboard_context(request.args)
+    formato = (request.args.get("formato") or "csv").strip().lower()
+    if formato == "pdf":
+        return _pdf_dashboard_response(context)
+    return _csv_dashboard_response(context)
 
 
 @app.route('/nova_demanda', methods=['GET', 'POST'])
@@ -546,10 +963,11 @@ def finalizar(id):
     cursor.execute(
         """
         UPDATE demandas
-        SET status = 'Finalizada'
+        SET status = 'Finalizada',
+            data_finalizacao = ?
         WHERE id = ?
         """,
-        (id,),
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id),
     )
     conn.commit()
     conn.close()
