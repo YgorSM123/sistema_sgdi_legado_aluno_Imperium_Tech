@@ -1,0 +1,13 @@
+tags:
+  - Web
+summary: Deletar demanda (formulario HTML)
+produces:
+  - text/html
+parameters:
+  - name: id
+    in: path
+    type: integer
+    required: true
+responses:
+  302:
+    description: Redireciona para listagem

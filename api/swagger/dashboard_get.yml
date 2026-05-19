@@ -1,0 +1,29 @@
+tags:
+  - Dashboard
+summary: Obter indicadores do dashboard (JSON)
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: periodo
+    in: query
+    type: string
+    enum: ["7d", "1m", "3m", "6m"]
+    default: "7d"
+  - name: responsavel
+    in: query
+    type: integer
+  - name: prioridade
+    in: query
+    type: string
+    enum: [alta, media, baixa]
+  - name: status
+    in: query
+    type: string
+    enum: [aberta, finalizada, atrasada]
+responses:
+  200:
+    description: Dados do dashboard
+  401:
+    description: Nao autenticado

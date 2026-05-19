@@ -1,0 +1,21 @@
+tags:
+  - Web
+summary: Adicionar comentario (formulario HTML)
+consumes:
+  - application/x-www-form-urlencoded
+produces:
+  - text/html
+parameters:
+  - name: demanda_id
+    in: path
+    type: integer
+    required: true
+  - name: comentario
+    in: formData
+    type: string
+  - name: autor
+    in: formData
+    type: string
+responses:
+  302:
+    description: Redireciona para detalhes da demanda

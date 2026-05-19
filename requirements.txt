@@ -1,1 +1,4 @@
 Flask==2.3.0
+flasgger==0.9.7.1
+PyJWT==2.8.0
+PyYAML==6.0.1

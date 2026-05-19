@@ -1,0 +1,16 @@
+tags:
+  - Web
+summary: Buscar demandas (HTML)
+description: Mesma listagem da pagina inicial com filtros de busca.
+produces:
+  - text/html
+parameters:
+  - name: q
+    in: query
+    type: string
+  - name: tab
+    in: query
+    type: string
+responses:
+  200:
+    description: Resultados da busca em HTML

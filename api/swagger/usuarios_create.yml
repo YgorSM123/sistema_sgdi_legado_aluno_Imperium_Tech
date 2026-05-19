@@ -1,0 +1,27 @@
+tags:
+  - Usuarios
+summary: Criar usuario
+security:
+  - Bearer: []
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - nome
+      properties:
+        nome:
+          type: string
+responses:
+  201:
+    description: Usuario criado
+  409:
+    description: Usuario ja existe
+  401:
+    description: Nao autenticado

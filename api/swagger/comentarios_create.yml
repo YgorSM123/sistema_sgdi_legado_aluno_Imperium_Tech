@@ -1,0 +1,34 @@
+tags:
+  - Comentarios
+summary: Adicionar comentario a demanda
+security:
+  - Bearer: []
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: demanda_id
+    in: path
+    type: integer
+    required: true
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - comentario
+        - autor
+      properties:
+        comentario:
+          type: string
+        autor:
+          type: string
+responses:
+  201:
+    description: Comentario criado
+  404:
+    description: Demanda nao encontrada
+  401:
+    description: Nao autenticado

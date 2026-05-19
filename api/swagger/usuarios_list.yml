@@ -1,0 +1,12 @@
+tags:
+  - Usuarios
+summary: Listar usuarios
+security:
+  - Bearer: []
+produces:
+  - application/json
+responses:
+  200:
+    description: Lista de usuarios
+  401:
+    description: Nao autenticado

@@ -1,0 +1,40 @@
+tags:
+  - Autenticacao
+summary: Obter token JWT
+description: Autentica integracao externa com client_id e client_secret configurados no servidor.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - client_id
+        - client_secret
+      properties:
+        client_id:
+          type: string
+          example: sgdi_integration
+        client_secret:
+          type: string
+          example: sgdi_api_secret_change_me
+responses:
+  200:
+    description: Token gerado com sucesso
+    schema:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 86400
+  401:
+    description: Credenciais invalidas

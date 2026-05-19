@@ -1,0 +1,23 @@
+tags:
+  - Web
+summary: Criar demanda (formulario HTML)
+consumes:
+  - application/x-www-form-urlencoded
+produces:
+  - text/html
+parameters:
+  - name: titulo
+    in: formData
+    type: string
+  - name: descricao
+    in: formData
+    type: string
+  - name: solicitante_id
+    in: formData
+    type: integer
+  - name: prioridade
+    in: formData
+    type: string
+responses:
+  200:
+    description: Formulario ou redirecionamento apos criacao

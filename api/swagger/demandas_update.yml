@@ -1,0 +1,35 @@
+tags:
+  - Demandas
+summary: Atualizar demanda
+security:
+  - Bearer: []
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: demanda_id
+    in: path
+    type: integer
+    required: true
+  - in: body
+    name: body
+    schema:
+      type: object
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: string
+        solicitante_id:
+          type: integer
+        prioridade:
+          type: string
+          enum: [alta, media, baixa]
+responses:
+  200:
+    description: Demanda atualizada
+  404:
+    description: Demanda nao encontrada
+  401:
+    description: Nao autenticado

@@ -1,0 +1,28 @@
+tags:
+  - Demandas
+summary: Listar demandas
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: status
+    in: query
+    type: string
+    enum: [Aberta, Finalizada]
+  - name: prioridade
+    in: query
+    type: string
+    enum: [alta, media, baixa]
+  - name: q
+    in: query
+    type: string
+    description: Busca em titulo, descricao ou solicitante
+  - name: solicitante_id
+    in: query
+    type: integer
+responses:
+  200:
+    description: Lista de demandas
+  401:
+    description: Nao autenticado

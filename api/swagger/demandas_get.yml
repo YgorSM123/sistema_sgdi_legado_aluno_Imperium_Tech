@@ -1,0 +1,19 @@
+tags:
+  - Demandas
+summary: Obter demanda por ID
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: demanda_id
+    in: path
+    type: integer
+    required: true
+responses:
+  200:
+    description: Demanda com comentarios
+  404:
+    description: Demanda nao encontrada
+  401:
+    description: Nao autenticado

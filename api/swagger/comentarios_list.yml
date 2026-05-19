@@ -1,0 +1,19 @@
+tags:
+  - Comentarios
+summary: Listar comentarios de uma demanda
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: demanda_id
+    in: path
+    type: integer
+    required: true
+responses:
+  200:
+    description: Lista de comentarios
+  404:
+    description: Demanda nao encontrada
+  401:
+    description: Nao autenticado

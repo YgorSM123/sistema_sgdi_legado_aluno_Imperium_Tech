@@ -1,0 +1,27 @@
+tags:
+  - Web
+summary: Exportar dashboard (CSV ou PDF)
+produces:
+  - text/csv
+  - application/pdf
+parameters:
+  - name: formato
+    in: query
+    type: string
+    enum: [csv, pdf]
+    default: csv
+  - name: periodo
+    in: query
+    type: string
+  - name: responsavel
+    in: query
+    type: integer
+  - name: prioridade
+    in: query
+    type: string
+  - name: status
+    in: query
+    type: string
+responses:
+  200:
+    description: Arquivo exportado

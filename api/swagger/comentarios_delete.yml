@@ -1,0 +1,19 @@
+tags:
+  - Comentarios
+summary: Excluir comentario
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: comentario_id
+    in: path
+    type: integer
+    required: true
+responses:
+  200:
+    description: Comentario excluido
+  404:
+    description: Comentario nao encontrado
+  401:
+    description: Nao autenticado

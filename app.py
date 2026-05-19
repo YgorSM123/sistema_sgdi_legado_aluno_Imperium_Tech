@@ -7,6 +7,10 @@ import sqlite3
 from datetime import datetime, timedelta
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request
+from flasgger import swag_from
+
+from api import register_api
+from api.paths import swagger_path
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEGACY_DB_PATH = os.path.join(BASE_DIR, "demandas_store.db")
@@ -393,7 +397,11 @@ ensure_database()
 PRIORIDADES_VALIDAS = frozenset(("alta", "media", "baixa"))
 
 
+register_api(app)
+
+
 @app.route('/')
+@swag_from(swagger_path('web_index.yml'))
 def index():
     return render_index()
 
@@ -801,11 +809,13 @@ def _pdf_dashboard_response(context):
 
 
 @app.route('/dashboard')
+@swag_from(swagger_path('web_dashboard.yml'))
 def dashboard():
     return render_template('dashboard.html', **_build_dashboard_context(request.args))
 
 
 @app.route('/dashboard/export')
+@swag_from(swagger_path('web_dashboard_export.yml'))
 def dashboard_export():
     context = _build_dashboard_context(request.args)
     formato = (request.args.get("formato") or "csv").strip().lower()
@@ -815,6 +825,7 @@ def dashboard_export():
 
 
 @app.route('/nova_demanda', methods=['GET', 'POST'])
+@swag_from(swagger_path('web_nova_demanda.yml'))
 def nova_demanda():
     conn = get_db()
     cursor = conn.cursor()
@@ -869,6 +880,7 @@ def nova_demanda():
 
 
 @app.route('/editar/<int:id>', methods=['GET', 'POST'])
+@swag_from(swagger_path('web_editar.yml'))
 def editar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -946,6 +958,7 @@ def editar(id):
 
 
 @app.route('/deletar/<int:id>', methods=['POST'])
+@swag_from(swagger_path('web_deletar.yml'))
 def deletar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -957,6 +970,7 @@ def deletar(id):
 
 
 @app.route('/finalizar/<int:id>', methods=['POST'])
+@swag_from(swagger_path('web_finalizar.yml'))
 def finalizar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -976,6 +990,7 @@ def finalizar(id):
 
 
 @app.route('/buscar')
+@swag_from(swagger_path('web_buscar.yml'))
 def buscar():
     return render_index()
 
@@ -985,6 +1000,7 @@ def buscar():
 #     return 'Área administrativa'
 
 @app.route('/detalhes/<int:id>')
+@swag_from(swagger_path('web_detalhes.yml'))
 def detalhes(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1020,6 +1036,7 @@ def detalhes(id):
 
 
 @app.route('/adicionar_comentario/<int:demanda_id>', methods=['POST'])
+@swag_from(swagger_path('web_comentario.yml'))
 def adicionar_comentario(demanda_id):
     comentario = request.form['comentario']
     autor = request.form['autor']

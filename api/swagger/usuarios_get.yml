@@ -1,0 +1,19 @@
+tags:
+  - Usuarios
+summary: Obter usuario por ID
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - name: usuario_id
+    in: path
+    type: integer
+    required: true
+responses:
+  200:
+    description: Usuario encontrado
+  404:
+    description: Usuario nao encontrado
+  401:
+    description: Nao autenticado

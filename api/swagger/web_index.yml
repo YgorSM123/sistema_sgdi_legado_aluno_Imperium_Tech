@@ -1,0 +1,21 @@
+tags:
+  - Web
+summary: Listagem de demandas (HTML)
+description: Interface web com abas abertas/finalizadas, busca e filtro de prioridade.
+produces:
+  - text/html
+parameters:
+  - name: tab
+    in: query
+    type: string
+    enum: [abertas, finalizadas]
+  - name: q
+    in: query
+    type: string
+  - name: prioridade
+    in: query
+    type: string
+    enum: [alta, media, baixa]
+responses:
+  200:
+    description: Pagina HTML da listagem

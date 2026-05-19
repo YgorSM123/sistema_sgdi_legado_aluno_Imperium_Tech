@@ -1,0 +1,41 @@
+tags:
+  - Demandas
+summary: Criar demanda
+security:
+  - Bearer: []
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - titulo
+        - descricao
+        - solicitante_id
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: string
+        solicitante_id:
+          type: integer
+        prioridade:
+          type: string
+          enum: [alta, media, baixa]
+          default: media
+        status:
+          type: string
+          enum: [Aberta, Finalizada]
+          default: Aberta
+responses:
+  201:
+    description: Demanda criada
+  400:
+    description: Dados invalidos
+  401:
+    description: Nao autenticado
