@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flasgger import swag_from
 
+from api.audit import log_audit_event
 from api.auth import token_required
 from api.paths import swagger_path
 from api.serializers import row_to_dict, rows_to_list
@@ -58,6 +59,15 @@ def criar_comentario(demanda_id):
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
+    log_audit_event(
+        "comentario.create",
+        entity_type="comentario",
+        entity_id=new_id,
+        business_actor=autor,
+        source="api",
+        status_code=201,
+        details={"demanda_id": demanda_id, "autor": autor},
+    )
     return jsonify({"id": new_id, "mensagem": "Comentario adicionado com sucesso"}), 201
 
 
@@ -69,14 +79,23 @@ def excluir_comentario(comentario_id):
 
     conn = get_db()
     comentario = conn.execute(
-        "SELECT id FROM comentarios WHERE id = ?",
+        "SELECT * FROM comentarios WHERE id = ?",
         (comentario_id,),
     ).fetchone()
     if comentario is None:
         conn.close()
         return jsonify({"erro": "Comentario nao encontrado"}), 404
 
+    snapshot = row_to_dict(comentario)
     conn.execute("DELETE FROM comentarios WHERE id = ?", (comentario_id,))
     conn.commit()
     conn.close()
+    log_audit_event(
+        "comentario.delete",
+        entity_type="comentario",
+        entity_id=comentario_id,
+        business_actor=snapshot.get("autor"),
+        source="api",
+        details={"excluido": snapshot},
+    )
     return jsonify({"mensagem": "Comentario excluido com sucesso"})

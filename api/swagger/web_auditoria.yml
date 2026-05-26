@@ -1,0 +1,27 @@
+tags:
+  - Web
+summary: Painel de auditoria (HTML)
+description: Historico visual de eventos registrados pelo sistema.
+produces:
+  - text/html
+parameters:
+  - name: action
+    in: query
+    type: string
+  - name: entity_type
+    in: query
+    type: string
+  - name: source
+    in: query
+    type: string
+    enum: [api, web]
+  - name: entity_id
+    in: query
+    type: integer
+  - name: page
+    in: query
+    type: integer
+    default: 1
+responses:
+  200:
+    description: Pagina HTML do painel de auditoria

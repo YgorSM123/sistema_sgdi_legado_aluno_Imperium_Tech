@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flasgger import swag_from
 
+from api.audit import log_audit_event
 from api.auth import token_required
 from api.paths import swagger_path
 from api.serializers import row_to_dict, rows_to_list
@@ -132,6 +133,15 @@ def criar_demanda():
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
+    log_audit_event(
+        "demanda.create",
+        entity_type="demanda",
+        entity_id=new_id,
+        business_actor=solicitante_id,
+        source="api",
+        status_code=201,
+        details={"titulo": titulo, "prioridade": prioridade, "status": status},
+    )
     return jsonify({"id": new_id, "mensagem": "Demanda criada com sucesso"}), 201
 
 
@@ -165,6 +175,7 @@ def atualizar_demanda(demanda_id):
         conn.close()
         return jsonify({"erro": "Solicitante nao encontrado"}), 404
 
+    old_values = row_to_dict(demanda)
     conn.execute(
         """
         UPDATE demandas
@@ -175,6 +186,22 @@ def atualizar_demanda(demanda_id):
     )
     conn.commit()
     conn.close()
+    log_audit_event(
+        "demanda.update",
+        entity_type="demanda",
+        entity_id=demanda_id,
+        business_actor=solicitante_id,
+        source="api",
+        details={
+            "antes": old_values,
+            "depois": {
+                "titulo": titulo,
+                "descricao": descricao,
+                "solicitante_id": solicitante_id,
+                "prioridade": prioridade,
+            },
+        },
+    )
     return jsonify({"mensagem": "Demanda atualizada com sucesso"})
 
 
@@ -184,14 +211,23 @@ def atualizar_demanda(demanda_id):
 def excluir_demanda(demanda_id):
     get_db, _, _, _, _ = _get_helpers()
     conn = get_db()
-    demanda = conn.execute("SELECT id FROM demandas WHERE id = ?", (demanda_id,)).fetchone()
+    demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (demanda_id,)).fetchone()
     if demanda is None:
         conn.close()
         return jsonify({"erro": "Demanda nao encontrada"}), 404
 
+    snapshot = row_to_dict(demanda)
     conn.execute("DELETE FROM demandas WHERE id = ?", (demanda_id,))
     conn.commit()
     conn.close()
+    log_audit_event(
+        "demanda.delete",
+        entity_type="demanda",
+        entity_id=demanda_id,
+        business_actor=snapshot.get("solicitante_id"),
+        source="api",
+        details={"excluido": snapshot},
+    )
     return jsonify({"mensagem": "Demanda excluida com sucesso"})
 
 
@@ -201,19 +237,28 @@ def excluir_demanda(demanda_id):
 def finalizar_demanda(demanda_id):
     get_db, _, _, _, _ = _get_helpers()
     conn = get_db()
-    demanda = conn.execute("SELECT id FROM demandas WHERE id = ?", (demanda_id,)).fetchone()
+    demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (demanda_id,)).fetchone()
     if demanda is None:
         conn.close()
         return jsonify({"erro": "Demanda nao encontrada"}), 404
 
+    data_finalizacao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
         """
         UPDATE demandas
         SET status = 'Finalizada', data_finalizacao = ?
         WHERE id = ?
         """,
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), demanda_id),
+        (data_finalizacao, demanda_id),
     )
     conn.commit()
     conn.close()
+    log_audit_event(
+        "demanda.finalize",
+        entity_type="demanda",
+        entity_id=demanda_id,
+        business_actor=demanda["solicitante_id"],
+        source="api",
+        details={"data_finalizacao": data_finalizacao},
+    )
     return jsonify({"mensagem": "Demanda finalizada com sucesso"})

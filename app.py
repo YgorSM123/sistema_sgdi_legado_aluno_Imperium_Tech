@@ -1,6 +1,7 @@
 import csv
 import glob
 import io
+import json
 import os
 import shutil
 import sqlite3
@@ -10,7 +11,9 @@ from flask import Flask, Response, abort, flash, redirect, render_template, requ
 from flasgger import swag_from
 
 from api import register_api
+from api.audit import log_audit_event
 from api.paths import swagger_path
+from api.serializers import row_to_dict
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEGACY_DB_PATH = os.path.join(BASE_DIR, "demandas_store.db")
@@ -36,6 +39,25 @@ PERIODOS_DASHBOARD = {
     "3m": {"label": "3 meses", "days": 90},
     "6m": {"label": "6 meses", "days": 180},
 }
+
+AUDIT_ACTION_LABELS = {
+    "auth.login_success": "Login realizado",
+    "auth.login_failed": "Login recusado",
+    "demanda.create": "Demanda criada",
+    "demanda.update": "Demanda atualizada",
+    "demanda.delete": "Demanda excluida",
+    "demanda.finalize": "Demanda finalizada",
+    "usuario.create": "Usuario criado",
+    "comentario.create": "Comentario adicionado",
+    "comentario.delete": "Comentario excluido",
+    "dashboard.read": "Dashboard consultado",
+    "dashboard.export": "Dashboard exportado",
+}
+
+AUDIT_ACTIONS = tuple(AUDIT_ACTION_LABELS.keys())
+AUDIT_ENTITY_TYPES = ("auth", "demanda", "usuario", "comentario", "dashboard")
+AUDIT_SOURCES = ("api", "web")
+AUDIT_PER_PAGE = 25
 
 
 def _sqlite_file_is_usable(db_path):
@@ -246,6 +268,9 @@ def ensure_database():
             if needs_finished_at:
                 conn.execute("ALTER TABLE demandas ADD COLUMN data_finalizacao TEXT")
             _seed_default_users(conn)
+            from api.audit import ensure_audit_table
+
+            ensure_audit_table(conn)
             conn.commit()
             return
 
@@ -388,6 +413,9 @@ def ensure_database():
                 valid_comments,
             )
 
+        from api.audit import ensure_audit_table
+
+        ensure_audit_table(conn)
         conn.commit()
 
 
@@ -808,6 +836,129 @@ def _pdf_dashboard_response(context):
     )
 
 
+def _build_auditoria_context(args):
+    action = (args.get("action") or "").strip()
+    entity_type = (args.get("entity_type") or "").strip()
+    source = (args.get("source") or "").strip()
+    entity_id = (args.get("entity_id") or "").strip()
+
+    try:
+        page = max(int(args.get("page", 1)), 1)
+    except (TypeError, ValueError):
+        page = 1
+
+    where = ["1=1"]
+    params = []
+
+    if action in AUDIT_ACTIONS:
+        where.append("action = ?")
+        params.append(action)
+    if entity_type in AUDIT_ENTITY_TYPES:
+        where.append("entity_type = ?")
+        params.append(entity_type)
+    if source in AUDIT_SOURCES:
+        where.append("source = ?")
+        params.append(source)
+    if entity_id.isdigit():
+        where.append("entity_id = ?")
+        params.append(int(entity_id))
+
+    where_sql = " AND ".join(where)
+    offset = (page - 1) * AUDIT_PER_PAGE
+
+    conn = get_db()
+    total_filtered = conn.execute(
+        f"SELECT COUNT(*) AS c FROM audit_events WHERE {where_sql}",
+        params,
+    ).fetchone()["c"]
+    rows = conn.execute(
+        f"""
+        SELECT * FROM audit_events
+        WHERE {where_sql}
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+        """,
+        [*params, AUDIT_PER_PAGE, offset],
+    ).fetchall()
+
+    total_all = conn.execute("SELECT COUNT(*) AS c FROM audit_events").fetchone()["c"]
+    last_24h = conn.execute(
+        """
+        SELECT COUNT(*) AS c FROM audit_events
+        WHERE occurred_at >= ?
+        """,
+        ((datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),),
+    ).fetchone()["c"]
+    by_source = {
+        row["source"]: row["c"]
+        for row in conn.execute(
+            """
+            SELECT source, COUNT(*) AS c
+            FROM audit_events
+            GROUP BY source
+            """
+        ).fetchall()
+    }
+    conn.close()
+
+    eventos = []
+    for row in rows:
+        evento = row_to_dict(row)
+        details_raw = evento.pop("details_json", None)
+        evento["details"] = None
+        evento["details_pretty"] = ""
+        if details_raw:
+            try:
+                evento["details"] = json.loads(details_raw)
+                evento["details_pretty"] = json.dumps(
+                    evento["details"], ensure_ascii=False, indent=2
+                )
+            except (TypeError, ValueError):
+                evento["details_pretty"] = details_raw
+        evento["action_label"] = AUDIT_ACTION_LABELS.get(
+            evento["action"], evento["action"]
+        )
+        actor_parts = []
+        if evento.get("actor_id"):
+            actor_parts.append(str(evento["actor_id"]))
+        elif evento.get("actor_type") == "web_unauthenticated":
+            actor_parts.append("Web (sem login)")
+        if evento.get("business_actor"):
+            actor_parts.append(f"negocio: {evento['business_actor']}")
+        evento["actor_display"] = " · ".join(actor_parts) if actor_parts else "—"
+        eventos.append(evento)
+
+    total_pages = max((total_filtered + AUDIT_PER_PAGE - 1) // AUDIT_PER_PAGE, 1)
+
+    return {
+        "eventos": eventos,
+        "filters": {
+            "action": action,
+            "entity_type": entity_type,
+            "source": source,
+            "entity_id": entity_id,
+        },
+        "page": page,
+        "total_pages": total_pages,
+        "total_filtered": total_filtered,
+        "total_all": total_all,
+        "last_24h": last_24h,
+        "by_source": by_source,
+        "audit_actions": AUDIT_ACTIONS,
+        "audit_action_labels": AUDIT_ACTION_LABELS,
+        "audit_entity_types": AUDIT_ENTITY_TYPES,
+        "audit_sources": AUDIT_SOURCES,
+        "per_page": AUDIT_PER_PAGE,
+        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+    }
+
+
+@app.route('/auditoria')
+@swag_from(swagger_path('web_auditoria.yml'))
+def auditoria():
+    return render_template('auditoria.html', **_build_auditoria_context(request.args))
+
+
 @app.route('/dashboard')
 @swag_from(swagger_path('web_dashboard.yml'))
 def dashboard():
@@ -819,6 +970,12 @@ def dashboard():
 def dashboard_export():
     context = _build_dashboard_context(request.args)
     formato = (request.args.get("formato") or "csv").strip().lower()
+    log_audit_event(
+        "dashboard.export",
+        entity_type="dashboard",
+        source="web",
+        details={"formato": formato, "filtros": dict(request.args)},
+    )
     if formato == "pdf":
         return _pdf_dashboard_response(context)
     return _csv_dashboard_response(context)
@@ -864,8 +1021,17 @@ def nova_demanda():
             """,
             (titulo, descricao, solicitante_id, data_criacao, prioridade, 'Aberta'),
         )
+        new_id = cursor.lastrowid
         conn.commit()
         conn.close()
+        log_audit_event(
+            "demanda.create",
+            entity_type="demanda",
+            entity_id=new_id,
+            business_actor=solicitante_id,
+            source="web",
+            details={"titulo": titulo, "prioridade": prioridade},
+        )
 
         flash('Salvo!')
         return redirect('/')
@@ -935,6 +1101,7 @@ def editar(id):
                 selected_solicitante_id=solicitante_id,
             )
 
+        old_values = dict(demanda)
         cursor.execute(
             """
             UPDATE demandas
@@ -945,6 +1112,22 @@ def editar(id):
         )
         conn.commit()
         conn.close()
+        log_audit_event(
+            "demanda.update",
+            entity_type="demanda",
+            entity_id=id,
+            business_actor=solicitante_id,
+            source="web",
+            details={
+                "antes": old_values,
+                "depois": {
+                    "titulo": titulo,
+                    "descricao": descricao,
+                    "solicitante_id": solicitante_id,
+                    "prioridade": prioridade,
+                },
+            },
+        )
         return redirect('/')
 
     conn.close()
@@ -962,8 +1145,21 @@ def editar(id):
 def deletar(id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM demandas WHERE id = ?', (id,))
-    conn.commit()
+    demanda = cursor.execute("SELECT * FROM demandas WHERE id = ?", (id,)).fetchone()
+    if demanda is not None:
+        snapshot = row_to_dict(demanda)
+        cursor.execute('DELETE FROM demandas WHERE id = ?', (id,))
+        conn.commit()
+        log_audit_event(
+            "demanda.delete",
+            entity_type="demanda",
+            entity_id=id,
+            business_actor=snapshot.get("solicitante_id"),
+            source="web",
+            details={"excluido": snapshot},
+        )
+    else:
+        conn.commit()
     conn.close()
     flash('Deletado!')
     return redirect('/')
@@ -974,6 +1170,10 @@ def deletar(id):
 def finalizar(id):
     conn = get_db()
     cursor = conn.cursor()
+    data_finalizacao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    demanda = cursor.execute(
+        "SELECT solicitante_id FROM demandas WHERE id = ?", (id,)
+    ).fetchone()
     cursor.execute(
         """
         UPDATE demandas
@@ -981,10 +1181,19 @@ def finalizar(id):
             data_finalizacao = ?
         WHERE id = ?
         """,
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id),
+        (data_finalizacao, id),
     )
     conn.commit()
     conn.close()
+    if demanda is not None:
+        log_audit_event(
+            "demanda.finalize",
+            entity_type="demanda",
+            entity_id=id,
+            business_actor=demanda["solicitante_id"],
+            source="web",
+            details={"data_finalizacao": data_finalizacao},
+        )
     flash('Demanda finalizada!')
     return redirect('/')
 
@@ -1064,8 +1273,17 @@ def adicionar_comentario(demanda_id):
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         ),
     )
+    new_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    log_audit_event(
+        "comentario.create",
+        entity_type="comentario",
+        entity_id=new_id,
+        business_actor=autor,
+        source="web",
+        details={"demanda_id": demanda_id, "autor": autor},
+    )
 
     return redirect(f'/detalhes/{demanda_id}')
 

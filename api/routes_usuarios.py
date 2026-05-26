@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flasgger import swag_from
 
+from api.audit import log_audit_event
 from api.auth import token_required
 from api.paths import swagger_path
 from api.serializers import row_to_dict, rows_to_list
@@ -41,6 +42,14 @@ def criar_usuario():
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
+    log_audit_event(
+        "usuario.create",
+        entity_type="usuario",
+        entity_id=new_id,
+        source="api",
+        status_code=201,
+        details={"nome": nome},
+    )
     return jsonify({"id": new_id, "nome": nome, "mensagem": "Usuario criado com sucesso"}), 201
 
 

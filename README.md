@@ -11,7 +11,11 @@ python app.py
 ```
 
 - Interface web: http://localhost:5000
+- Painel de auditoria: http://localhost:5000/auditoria
 - **Swagger (todas as rotas):** http://localhost:5000/apidocs/
+  1. Execute **POST /api/auth/login** (Try it out → Execute)
+  2. Depois use as outras APIs (token aplicado automaticamente)
+  3. Ou clique em **Authorize** e cole `Bearer SEU_TOKEN`
 
 ## API REST (integração externa)
 
@@ -50,6 +54,15 @@ curl http://localhost:5000/api/demandas \
 | POST | `/api/comentarios/demanda/{id}` | Adicionar comentário |
 | DELETE | `/api/comentarios/{id}` | Excluir comentário |
 | GET | `/api/dashboard` | Indicadores (JSON) |
+| GET | `/api/audit/events` | Historico de auditoria |
+
+### Auditoria e rastreabilidade
+
+O sistema registra automaticamente acoes importantes na tabela `audit_events` (SQLite): criar/editar/excluir demandas e comentarios, login, exportacao de dashboard, etc.
+
+Cada registro inclui data/hora, acao, entidade, ator (cliente JWT na API ou interface web), IP, metodo, caminho e detalhes em JSON (ex.: antes/depois em atualizacoes).
+
+Consulte via **GET /api/audit/events** (JWT). Filtros: `action`, `entity_type`, `entity_id`, `source` (`api` ou `web`), `limit`, `offset`.
 
 ### Variáveis de ambiente (produção)
 
@@ -62,6 +75,8 @@ curl http://localhost:5000/api/demandas \
 
 ## Funcionalidades
 
+- Painel web de auditoria (`/auditoria`) com filtros e detalhes JSON
+- Log de auditoria centralizado (rastreabilidade de acoes)
 - Criar demandas
 - Editar demandas
 - Deletar demandas

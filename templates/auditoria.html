@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="audit-shell">
+    <div class="audit-hero">
+        <div>
+            <p class="audit-kicker">Rastreabilidade</p>
+            <h2>Painel de auditoria</h2>
+            <p class="muted">Historico centralizado de acoes no SGDI · atualizado em {{ generated_at }}</p>
+        </div>
+        <div class="audit-hero-note">
+            <span>Registros</span>
+            <strong>{{ total_all }}</strong>
+        </div>
+    </div>
+
+    <div class="audit-stats">
+        <article class="audit-stat-card">
+            <span>Total filtrado</span>
+            <strong>{{ total_filtered }}</strong>
+        </article>
+        <article class="audit-stat-card">
+            <span>Ultimas 24h</span>
+            <strong>{{ last_24h }}</strong>
+        </article>
+        <article class="audit-stat-card">
+            <span>Via API</span>
+            <strong>{{ by_source.get('api', 0) }}</strong>
+        </article>
+        <article class="audit-stat-card">
+            <span>Via Web</span>
+            <strong>{{ by_source.get('web', 0) }}</strong>
+        </article>
+    </div>
+
+    <form class="audit-filters" method="get" action="/auditoria">
+        <div class="audit-filter-field">
+            <label for="filtro-action">Acao</label>
+            <select id="filtro-action" name="action">
+                <option value="">Todas</option>
+                {% for acao in audit_actions %}
+                <option value="{{ acao }}" {% if filters.action == acao %}selected{% endif %}>
+                    {{ audit_action_labels[acao] }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="audit-filter-field">
+            <label for="filtro-entity">Entidade</label>
+            <select id="filtro-entity" name="entity_type">
+                <option value="">Todas</option>
+                {% for tipo in audit_entity_types %}
+                <option value="{{ tipo }}" {% if filters.entity_type == tipo %}selected{% endif %}>{{ tipo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="audit-filter-field">
+            <label for="filtro-source">Origem</label>
+            <select id="filtro-source" name="source">
+                <option value="">Todas</option>
+                {% for origem in audit_sources %}
+                <option value="{{ origem }}" {% if filters.source == origem %}selected{% endif %}>{{ origem|upper }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="audit-filter-field">
+            <label for="filtro-entity-id">ID entidade</label>
+            <input id="filtro-entity-id" type="number" name="entity_id" min="1" value="{{ filters.entity_id }}" placeholder="Ex.: 12">
+        </div>
+        <div class="audit-filter-actions">
+            <button type="submit">Filtrar</button>
+            <a class="btn-link audit-clear" href="/auditoria">Limpar</a>
+        </div>
+    </form>
+
+    <div class="table-wrap audit-table-wrap">
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Acao</th>
+                    <th>Entidade</th>
+                    <th>Ator</th>
+                    <th>Origem</th>
+                    <th>Requisicao</th>
+                    <th>Detalhes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if eventos %}
+                    {% for evento in eventos %}
+                    <tr>
+                        <td class="audit-cell-datetime">{{ evento.occurred_at }}</td>
+                        <td>
+                            <span class="audit-action-pill">{{ evento.action_label }}</span>
+                            <span class="audit-action-code">{{ evento.action }}</span>
+                        </td>
+                        <td>
+                            {% if evento.entity_type %}
+                                <span class="badge audit-entity">{{ evento.entity_type }}</span>
+                                {% if evento.entity_id %}<span class="audit-entity-id">#{{ evento.entity_id }}</span>{% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="audit-cell-actor">{{ evento.actor_display }}</td>
+                        <td><span class="badge audit-source-{{ evento.source }}">{{ evento.source|upper }}</span></td>
+                        <td class="audit-cell-request">
+                            {% if evento.request_method %}
+                                <span>{{ evento.request_method }}</span>
+                                <span class="audit-path">{{ evento.request_path or '—' }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                            {% if evento.ip_address %}
+                                <span class="audit-ip">{{ evento.ip_address }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if evento.details_pretty %}
+                            <details class="audit-details">
+                                <summary>Ver JSON</summary>
+                                <pre>{{ evento.details_pretty }}</pre>
+                            </details>
+                            {% else %}
+                                <span class="muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="audit-empty">Nenhum evento encontrado para os filtros selecionados.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="audit-pagination" aria-label="Paginacao do painel de auditoria">
+        {% if page > 1 %}
+        <a href="{{ url_for('auditoria', page=page-1, action=filters.action, entity_type=filters.entity_type, source=filters.source, entity_id=filters.entity_id) }}">Anterior</a>
+        {% endif %}
+        <span>Pagina {{ page }} de {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ url_for('auditoria', page=page+1, action=filters.action, entity_type=filters.entity_type, source=filters.source, entity_id=filters.entity_id) }}">Proxima</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

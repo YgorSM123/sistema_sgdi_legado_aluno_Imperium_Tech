@@ -48,6 +48,30 @@ def main():
         """
     )
 
+    cursor.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at TEXT NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            actor_type TEXT NOT NULL,
+            actor_id TEXT,
+            business_actor TEXT,
+            source TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            request_method TEXT,
+            request_path TEXT,
+            status_code INTEGER,
+            details_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_occurred_at ON audit_events(occurred_at);
+        CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_events(action);
+        """
+    )
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS comentarios (

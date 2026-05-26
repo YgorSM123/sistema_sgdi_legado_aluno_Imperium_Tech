@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flasgger import swag_from
 
+from api.audit import log_audit_event
 from api.auth import token_required
 from api.paths import swagger_path
 
@@ -14,6 +15,12 @@ def dashboard_json():
     from app import _build_dashboard_context
 
     context = _build_dashboard_context(request.args)
+    log_audit_event(
+        "dashboard.read",
+        entity_type="dashboard",
+        source="api",
+        details={"filtros": dict(request.args)},
+    )
     return jsonify(
         {
             "company_name": context["company_name"],

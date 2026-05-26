@@ -1,0 +1,40 @@
+tags:
+  - Auditoria
+summary: Listar eventos de auditoria
+description: Historico centralizado de acoes registradas no sistema.
+security:
+  - Bearer: []
+produces:
+  - application/json
+parameters:
+  - in: query
+    name: action
+    type: string
+    description: Filtrar por acao (ex. demanda.create)
+  - in: query
+    name: entity_type
+    type: string
+    description: Filtrar por tipo de entidade (demanda, usuario, comentario, auth)
+  - in: query
+    name: entity_id
+    type: integer
+    description: Filtrar por ID da entidade
+  - in: query
+    name: source
+    type: string
+    enum: [api, web]
+    description: Origem do evento
+  - in: query
+    name: limit
+    type: integer
+    default: 50
+    description: Maximo de registros (ate 200)
+  - in: query
+    name: offset
+    type: integer
+    default: 0
+responses:
+  200:
+    description: Lista de eventos
+  401:
+    description: Nao autenticado

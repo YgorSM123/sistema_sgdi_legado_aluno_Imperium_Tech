@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 import jwt
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 from api.config import (
     API_CLIENT_ID,
@@ -41,7 +41,8 @@ def token_required(f):
         if not token:
             return jsonify({"erro": "Token de autenticacao ausente. Use Authorization: Bearer <token>"}), 401
         try:
-            decode_token(token)
+            payload = decode_token(token)
+            g.client_id = payload.get("sub")
         except jwt.ExpiredSignatureError:
             return jsonify({"erro": "Token expirado"}), 401
         except jwt.InvalidTokenError:
