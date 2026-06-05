@@ -835,109 +835,125 @@ def _pdf_dashboard_response(context):
         headers={"Content-Disposition": "attachment; filename=dashboard_sgdi.pdf"},
     )
 
-
-def _build_auditoria_context(args):
-    action = (args.get("action") or "").strip()
-    entity_type = (args.get("entity_type") or "").strip()
-    source = (args.get("source") or "").strip()
-    entity_id = (args.get("entity_id") or "").strip()
+def _extract_audit_filters(args, *fields):
+    filters = {
+        field: (args.get(field) or "").strip()
+        for field in fields
+    }
 
     try:
         page = max(int(args.get("page", 1)), 1)
     except (TypeError, ValueError):
         page = 1
 
-    where = ["1=1"]
+    return filters, page
+
+
+def _build_where_clause(filters):
+    """Constrói a cláusula WHERE de forma dinâmica baseada nos filtros válidos."""
+    where = []
     params = []
 
-    if action in AUDIT_ACTIONS:
-        where.append("action = ?")
-        params.append(action)
-    if entity_type in AUDIT_ENTITY_TYPES:
-        where.append("entity_type = ?")
-        params.append(entity_type)
-    if source in AUDIT_SOURCES:
-        where.append("source = ?")
-        params.append(source)
-    if entity_id.isdigit():
-        where.append("entity_id = ?")
-        params.append(int(entity_id))
+    validations = {
+        "action": lambda x: x in AUDIT_ACTIONS,
+        "entity_type": lambda x: x in AUDIT_ENTITY_TYPES,
+        "source": lambda x: x in AUDIT_SOURCES,
+        "entity_id": lambda x: x.isdigit(),
+    }
 
-    where_sql = " AND ".join(where)
+    for field, validator in validations.items():
+        value = filters.get(field)
+
+        if value and validator(value):
+            where.append(f"{field} = ?")
+            params.append(int(value) if field == "entity_id" else value)
+
+    return " AND ".join(where) if where else "1=1", params
+
+
+def _format_audit_event(row):
+    """Processa o JSON e cria a representação visual dos atores (presentation logic)."""
+    evento = row_to_dict(row)
+    details_raw = evento.pop("details_json", None)
+
+    evento["details"] = None
+    evento["details_pretty"] = ""
+
+    if details_raw:
+        try:
+            evento["details"] = json.loads(details_raw)
+            evento["details_pretty"] = json.dumps(
+                evento["details"], ensure_ascii=False, indent=2
+            )
+        except (TypeError, ValueError):
+            evento["details_pretty"] = details_raw
+
+    evento["action_label"] = AUDIT_ACTION_LABELS.get(
+        evento["action"], evento["action"]
+    )
+
+    actor_parts = []
+    if evento.get("actor_id"):
+        actor_parts.append(str(evento["actor_id"]))
+    elif evento.get("actor_type") == "web_unauthenticated":
+        actor_parts.append("Web (sem login)")
+
+    if evento.get("business_actor"):
+        actor_parts.append(f"negócio: {evento['business_actor']}")
+
+    evento["actor_display"] = " · ".join(actor_parts) if actor_parts else "—"
+
+    return evento
+
+
+def _build_auditoria_context(args):
+    """Função principal que orquestra a coleta e montagem do contexto."""
+
+    filters, page = _extract_audit_filters(
+        args,
+        "action",
+        "entity_type",
+        "source",
+        "entity_id"
+    )
+
+    where_sql, params = _build_where_clause(filters)
+
     offset = (page - 1) * AUDIT_PER_PAGE
+    yesterday = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
-    total_filtered = conn.execute(
-        f"SELECT COUNT(*) AS c FROM audit_events WHERE {where_sql}",
-        params,
-    ).fetchone()["c"]
-    rows = conn.execute(
-        f"""
-        SELECT * FROM audit_events
-        WHERE {where_sql}
-        ORDER BY id DESC
-        LIMIT ? OFFSET ?
-        """,
-        [*params, AUDIT_PER_PAGE, offset],
-    ).fetchall()
+    try:
+        total_filtered = conn.execute(
+            f"SELECT COUNT(*) AS c FROM audit_events WHERE {where_sql}", params
+        ).fetchone()["c"]
 
-    total_all = conn.execute("SELECT COUNT(*) AS c FROM audit_events").fetchone()["c"]
-    last_24h = conn.execute(
-        """
-        SELECT COUNT(*) AS c FROM audit_events
-        WHERE occurred_at >= ?
-        """,
-        ((datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),),
-    ).fetchone()["c"]
-    by_source = {
-        row["source"]: row["c"]
-        for row in conn.execute(
-            """
-            SELECT source, COUNT(*) AS c
-            FROM audit_events
-            GROUP BY source
-            """
+        rows = conn.execute(
+            f"SELECT * FROM audit_events WHERE {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            [*params, AUDIT_PER_PAGE, offset],
         ).fetchall()
-    }
-    conn.close()
 
-    eventos = []
-    for row in rows:
-        evento = row_to_dict(row)
-        details_raw = evento.pop("details_json", None)
-        evento["details"] = None
-        evento["details_pretty"] = ""
-        if details_raw:
-            try:
-                evento["details"] = json.loads(details_raw)
-                evento["details_pretty"] = json.dumps(
-                    evento["details"], ensure_ascii=False, indent=2
-                )
-            except (TypeError, ValueError):
-                evento["details_pretty"] = details_raw
-        evento["action_label"] = AUDIT_ACTION_LABELS.get(
-            evento["action"], evento["action"]
-        )
-        actor_parts = []
-        if evento.get("actor_id"):
-            actor_parts.append(str(evento["actor_id"]))
-        elif evento.get("actor_type") == "web_unauthenticated":
-            actor_parts.append("Web (sem login)")
-        if evento.get("business_actor"):
-            actor_parts.append(f"negocio: {evento['business_actor']}")
-        evento["actor_display"] = " · ".join(actor_parts) if actor_parts else "—"
-        eventos.append(evento)
+        total_all = conn.execute(
+            "SELECT COUNT(*) AS c FROM audit_events"
+        ).fetchone()["c"]
+
+        last_24h = conn.execute(
+            "SELECT COUNT(*) AS c FROM audit_events WHERE occurred_at >= ?", (yesterday,)
+        ).fetchone()["c"]
+
+        by_source_rows = conn.execute(
+            "SELECT source, COUNT(*) AS c FROM audit_events GROUP BY source"
+        ).fetchall()
+        by_source = {row["source"]: row["c"] for row in by_source_rows}
+
+    finally:
+        conn.close()
 
     total_pages = max((total_filtered + AUDIT_PER_PAGE - 1) // AUDIT_PER_PAGE, 1)
 
     return {
-        "eventos": eventos,
-        "filters": {
-            "action": action,
-            "entity_type": entity_type,
-            "source": source,
-            "entity_id": entity_id,
-        },
+        "eventos": [_format_audit_event(r) for r in rows],
+        "filters": filters,
         "page": page,
         "total_pages": total_pages,
         "total_filtered": total_filtered,
@@ -1203,11 +1219,6 @@ def finalizar(id):
 def buscar():
     return render_index()
 
-
-# @app.route('/admin')
-# def admin():
-#     return 'Área administrativa'
-
 @app.route('/detalhes/<int:id>')
 @swag_from(swagger_path('web_detalhes.yml'))
 def detalhes(id):
@@ -1286,10 +1297,6 @@ def adicionar_comentario(demanda_id):
     )
 
     return redirect(f'/detalhes/{demanda_id}')
-
-
-def calcular_prazo(data_inicio):
-    return "30 dias"
 
 
 if __name__ == '__main__':

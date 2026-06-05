@@ -4,6 +4,8 @@ Sistema para gerenciar demandas internas da empresa.
 
 ## Como rodar
 
+Use o python na versão 3.11
+
 ```bash
 pip install -r requirements.txt
 python init_db.py
